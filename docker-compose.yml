@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: battery_twin_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  backend:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+    container_name: battery_twin_backend
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MLFLOW_TRACKING_URI=http://localhost:5000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    restart: always
+
+  frontend:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+    container_name: battery_twin_frontend
+    command: streamlit run src/frontend/app.py --server.port 8501 --server.address 0.0.0.0
+    environment:
+      - BACKEND_API_URL=http://backend:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    restart: always
