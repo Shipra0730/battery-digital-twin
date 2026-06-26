@@ -294,3 +294,14 @@ if __name__ == "__main__":
         output_path="data/processed/synthetic_nmc_100_cycles.csv",
         num_cycles=100
     )
+def generate_cycle_data(sim, num_cycles):
+    """Generates battery degradation data over a specified number of cycles."""
+    history = []
+    
+    for cycle in range(1, num_cycles + 1):
+        # Run the simulation for one cycle
+        cycle_data = sim.simulate_cycle() 
+        cycle_data["Cycle"] = cycle
+        history.append(cycle_data)
+        
+    return pd.DataFrame(history)
