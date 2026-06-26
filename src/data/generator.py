@@ -333,24 +333,31 @@ if __name__ == "__main__":
 def generate_cycle_data(sim, num_cycles: int) -> pd.DataFrame:
     """
     Runs the simulation in memory and returns a DataFrame.
-    Optimized for lightning-fast rendering on the Streamlit UI.
+    Includes numerical stability checks to prevent server hangs.
     """
     sim.reset_states()
     T_amb_k = 298.15
     I_discharge_cc = 1.0 * sim.nominal_capacity
     
     records = []
-    dt = 60.0 # Fast 60-second steps for the web interface
+    dt = 10.0 # Changed back to 10.0 to keep the physics math stable!
     global_time = 0.0
+    
+    import pandas as pd
+    import numpy as np
     
     for cycle in range(1, num_cycles + 1):
         sim.cycle_count = cycle
         discharging = True
+        safety_counter = 0 # Failsafe brake
         
-        while discharging:
+        while discharging and safety_counter < 5000:
             res = sim.step(dt, I_discharge_cc, T_amb_k)
             global_time += dt
-            if res["voltage"] <= sim.V_min:
+            safety_counter += 1
+            
+            # Break if voltage drops OR if the math crashes (NaN)
+            if np.isnan(res["voltage"]) or res["voltage"] <= sim.V_min:
                 discharging = False
                 
         # Save the end-of-discharge state for this cycle
@@ -362,8 +369,6 @@ def generate_cycle_data(sim, num_cycles: int) -> pd.DataFrame:
         })
         
         # Instantly 'recharge' the battery logic for the next cycle loop
-        import numpy as np
         sim.c = np.ones(sim.N_shells) * sim.C_max * sim.c_init_ratio
         
-    import pandas as pd
     return pd.DataFrame(records)
