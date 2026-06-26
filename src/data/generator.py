@@ -330,14 +330,40 @@ if __name__ == "__main__":
         output_path="data/processed/synthetic_nmc_100_cycles.csv",
         num_cycles=100
     )
-def generate_cycle_data(sim, num_cycles):
-    """Generates battery degradation data over a specified number of cycles."""
-    history = []
+def generate_cycle_data(sim, num_cycles: int) -> pd.DataFrame:
+    """
+    Runs the simulation in memory and returns a DataFrame.
+    Optimized for lightning-fast rendering on the Streamlit UI.
+    """
+    sim.reset_states()
+    T_amb_k = 298.15
+    I_discharge_cc = 1.0 * sim.nominal_capacity
+    
+    records = []
+    dt = 60.0 # Fast 60-second steps for the web interface
+    global_time = 0.0
     
     for cycle in range(1, num_cycles + 1):
-        # Run the simulation for one cycle
-        cycle_data = sim.simulate_cycle() 
-        cycle_data["Cycle"] = cycle
-        history.append(cycle_data)
+        sim.cycle_count = cycle
+        discharging = True
         
-    return pd.DataFrame(history)
+        while discharging:
+            res = sim.step(dt, I_discharge_cc, T_amb_k)
+            global_time += dt
+            if res["voltage"] <= sim.V_min:
+                discharging = False
+                
+        # Save the end-of-discharge state for this cycle
+        records.append({
+            "time": global_time,
+            "cycle": cycle,
+            "step_name": "discharge",
+            **res
+        })
+        
+        # Instantly 'recharge' the battery logic for the next cycle loop
+        import numpy as np
+        sim.c = np.ones(sim.N_shells) * sim.C_max * sim.c_init_ratio
+        
+    import pandas as pd
+    return pd.DataFrame(records)
