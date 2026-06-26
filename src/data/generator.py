@@ -287,6 +287,42 @@ class BatteryPhysicsSimulator:
         print(f"Successfully simulated and saved cycling dataset to {output_path} (Total rows: {len(df)})")
         return df
 
+def generate_cycle_data(sim, num_cycles: int) -> pd.DataFrame:
+    """
+    Runs the simulation in memory and returns a DataFrame.
+    Optimized for lightning-fast rendering on the Streamlit UI.
+    """
+    sim.reset_states()
+    T_amb_k = 298.15
+    I_discharge_cc = 1.0 * sim.nominal_capacity
+    
+    records = []
+    dt = 60.0 # Fast 60-second steps for the web interface
+    global_time = 0.0
+    
+    for cycle in range(1, num_cycles + 1):
+        sim.cycle_count = cycle
+        discharging = True
+        
+        while discharging:
+            res = sim.step(dt, I_discharge_cc, T_amb_k)
+            global_time += dt
+            if res["voltage"] <= sim.V_min:
+                discharging = False
+                
+        # Save the end-of-discharge state for this cycle
+        records.append({
+            "time": global_time,
+            "cycle": cycle,
+            "step_name": "discharge",
+            **res
+        })
+        
+        # Instantly 'recharge' the battery logic for the next cycle loop
+        sim.c = np.ones(sim.N_shells) * sim.C_max * sim.c_init_ratio
+        
+    return pd.DataFrame(records)
+
 if __name__ == "__main__":
     # Generate default dataset if executed directly
     sim = BatteryPhysicsSimulator(chemistry="NMC")
